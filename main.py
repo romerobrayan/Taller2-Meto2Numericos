@@ -10,6 +10,8 @@ import argparse
 import sys
 from pathlib import Path
 
+import sympy as sp
+
 from lagrange.analisis import Configuracion, analizar
 from lagrange.entrada import (
     ErrorEntrada,
