@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Entornos virtuales
+.venv/
+venv/
+
+# Archivos generados por el programa
+salidas/*
+!salidas/.gitkeep
+
+# Editores / sistema
+.vscode/
+.idea/
+.DS_Store
