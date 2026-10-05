@@ -92,7 +92,7 @@ def biseccion(
 
 
 def buscar_cambios_signo(
-    f: Funcion, a: float, b: float, subintervalos: int = 200
+    f: Funcion, a: float, b: float, subintervalos: int = 199
 ) -> tuple[list[tuple[float, float]], list[float]]:
     """Recorre [a, b] y devuelve (subintervalos con cambio de signo, ceros exactos en la malla)."""
     malla = np.linspace(float(a), float(b), subintervalos + 1)
@@ -117,7 +117,7 @@ def buscar_raices(
     b: float,
     tol: float = 1e-12,
     max_iter: int = 100,
-    subintervalos: int = 200,
+    subintervalos: int = 199,
 ) -> list[ResultadoBiseccion]:
     """Encuentra las raíces de f en [a, b]: barrido de signos + bisección en cada cambio."""
     intervalos, ceros = buscar_cambios_signo(f, a, b, subintervalos)
