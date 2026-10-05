@@ -254,3 +254,102 @@ def test_propiedades_aleatorias(expr_str, intervalo):
         # 5. Cross-check contra sympy.interpolating_poly
         poly_ref = sp.interpolating_poly(len(nodos), X, nodos, an.valores)
         assert sp.simplify(an.lagrange.polinomio - poly_ref) == 0
+
+
+# ==============================================================================
+# 4. PRUEBAS DE VARIABLES PERSONALIZADAS E INGRESO GUIADO
+# ==============================================================================
+
+def test_variable_personalizada_t():
+    """Verifica que el sistema admite una variable independiente distinta de 'x' (ej. 't')."""
+    f = parsear_funcion("f(t) = 1/t")
+    nodos = parsear_lista("2, 2.75, 4")
+    xstar = sp.Integer(3)
+    an = analizar(nodos, funcion=f, puntos=[xstar])
+    pt = an.puntos[0]
+
+    t = sp.Symbol("t", real=True)
+    assert an.var.name == "t"
+    assert t in an.lagrange.polinomio.free_symbols
+    assert pt.valor_polinomio == R(29, 88)
+    assert pt.directo.valor == R(29, 88)
+    assert pt.neville.valor == R(29, 88)
+
+    from lagrange.reporte import reporte_texto
+    rep = reporte_texto(an)
+    assert "t* = 3" in rep
+    assert "P_2(t)" in rep
+    assert "L_{2,0}(t)" in rep
+
+
+def test_interfaz_ingreso_guiado_y_cambio_puntos():
+    """Verifica el flujo guiado punto por punto y la opción de cambiar puntos a evaluar."""
+    from lagrange.interfaz import Interfaz
+
+    # Respuestas simuladas para opcion_funcion:
+    # 1. f(x) = "1/x"
+    # 2. Modo de nodos = "2" (punto por punto)
+    # 3. Cantidad = "3"
+    # 4. Nodo 0 = "2"
+    # 5. Nodo 1 = "2.75"
+    # 6. Nodo 2 = "4"
+    # 7. Punto(s) a evaluar = "3"
+    entradas_f = iter([
+        "1/x",
+        "2",
+        "3",
+        "2",
+        "2.75",
+        "4",
+        "3",
+    ])
+    salidas = []
+    ui = Interfaz(leer=lambda _: next(entradas_f), escribir=lambda s: salidas.append(s))
+    ui.opcion_funcion()
+
+    assert ui.analisis is not None
+    assert ui.analisis.lagrange.n == 2
+    assert ui.analisis.puntos[0].valor_polinomio == R(29, 88)
+
+    # Ahora cambiar los puntos a evaluar (Opción 3)
+    entradas_puntos = iter(["2.5, 3.5"])
+    ui._leer = lambda _: next(entradas_puntos)
+    ui.opcion_puntos()
+
+    assert len(ui.analisis.puntos) == 2
+    assert ui.analisis.puntos[0].xstar == R(5, 2)
+    assert ui.analisis.puntos[1].xstar == R(7, 2)
+
+
+def test_interfaz_modo_tabla_guiado():
+    """Verifica el flujo guiado punto por punto en modo tabla."""
+    from lagrange.interfaz import Interfaz
+
+    # Respuestas simuladas:
+    # 1. Variable = "t"
+    # 2. Modo = "2" (punto por punto)
+    # 3. Cantidad = "3"
+    # 4. t_0 = "0", y_0 = "18"
+    # 5. t_1 = "2", y_1 = "24"
+    # 6. t_2 = "5", y_2 = "21"
+    # 7. t* = "3"
+    # 8. valor real conocido = "23"
+    entradas = iter([
+        "t",
+        "2",
+        "3",
+        "0", "18",
+        "2", "24",
+        "5", "21",
+        "3",
+        "23",
+    ])
+    salidas = []
+    ui = Interfaz(leer=lambda _: next(entradas), escribir=lambda s: salidas.append(s))
+    ui.opcion_tabla()
+
+    assert ui.analisis is not None
+    assert ui.var.name == "t"
+    assert ui.analisis.lagrange.n == 2
+    assert ui.analisis.puntos[0].error.error_absoluto is not None
+

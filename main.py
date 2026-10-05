@@ -78,6 +78,12 @@ def crear_parser() -> argparse.ArgumentParser:
         help="Iteraciones máximas para el método de bisección (por defecto: 100).",
     )
     parser.add_argument(
+        "--var",
+        type=str,
+        default=None,
+        help="Variable independiente (ej. 'x', 't', 'u'). Por defecto: detectada de --f o 'x'.",
+    )
+    parser.add_argument(
         "--solo-resumen",
         action="store_true",
         help="Muestra únicamente la sección 9 de resumen final consolidado.",
@@ -143,6 +149,8 @@ def ejecutar_cli(args: argparse.Namespace) -> int:
             max_iter=args.max_iter,
         )
 
+        var_sym = sp.Symbol(args.var.strip()) if args.var is not None else None
+
         an = analizar(
             nodos=nodos,
             valores=valores,
@@ -150,6 +158,7 @@ def ejecutar_cli(args: argparse.Namespace) -> int:
             puntos=puntos,
             reales=reales,
             config=cfg,
+            var=var_sym,
         )
 
         # Imprimir reporte

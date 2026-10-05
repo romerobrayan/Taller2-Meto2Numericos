@@ -160,13 +160,60 @@ def parsear_lista(texto: str) -> list[sp.Expr]:
     return [parsear_numero(p) for p in separar_lista(texto)]
 
 
-def parsear_funcion(texto: str) -> sp.Expr:
-    """Convierte un texto como ``'1/x'`` o ``'exp(x)*cos(x)'`` en una expresión de SymPy."""
-    expr = _parsear_seguro(texto, _NOMBRES_FUNCION, "función")
-    otros = expr.free_symbols - {X}
+def limpiar_prefijo_funcion(texto: str) -> str:
+    """Elimina prefijos como 'f(x) =', 'f(t) =', 'y =', 'P(x) =', etc."""
+    t = texto.strip()
+    if "=" in t:
+        partes = t.split("=", 1)
+        izq = partes[0].strip()
+        if re.fullmatch(r"[A-Za-z_]\w*(\s*\(\s*[A-Za-z_]\w*\s*\))?", izq):
+            t = partes[1].strip()
+    return t
+
+
+def parsear_funcion(texto: str, variable: str | sp.Symbol | None = None) -> sp.Expr:
+    """Convierte un texto como ``'1/x'``, ``'f(t) = exp(t)*cos(t)'`` o ``'y = x^3'`` en una expresión de SymPy.
+
+    Permite cualquier nombre de variable independiente (ej. 'x', 't', 'u').
+    Si no se especifica ``variable``, se detecta automáticamente.
+    """
+    texto = limpiar_prefijo_funcion(texto)
+
+    # Identificar posibles nombres de variable en el texto
+    sin_numeros = _RE_NUMERO_LITERAL.sub(" ", texto)
+    encontrados = set(_RE_IDENTIFICADOR.findall(sin_numeros))
+    candidatos_var = encontrados - set(_NOMBRES_CONSTANTE)
+
+    if variable is not None:
+        var_nom = variable.name if isinstance(variable, sp.Symbol) else str(variable).strip()
+        var_sym = sp.Symbol(var_nom, real=True)
+    elif candidatos_var:
+        if len(candidatos_var) > 1:
+            raise ErrorEntrada(
+                f"La función contiene múltiples variables independientes ({sorted(candidatos_var)}). "
+                "Solo se permite una variable a evaluar."
+            )
+        var_nom = list(candidatos_var)[0]
+        var_sym = sp.Symbol(var_nom, real=True)
+    else:
+        var_nom = "x"
+        var_sym = X
+
+    permitidos = dict(_NOMBRES_CONSTANTE)
+    permitidos[var_nom] = var_sym
+
+    expr = _parsear_seguro(texto, permitidos, "función")
+    otros = expr.free_symbols - {var_sym}
     if otros:
-        raise ErrorEntrada(f"La función solo puede depender de x (encontrado: {otros}).")
+        raise ErrorEntrada(f"La función solo puede depender de {var_nom} (encontrado: {otros}).")
     return expr
+
+
+def obtener_variable(f: sp.Expr | None, preferida: str = "x") -> sp.Symbol:
+    """Obtiene el símbolo de la variable independiente de una función, o el símbolo por defecto."""
+    if f is not None and f.free_symbols:
+        return list(f.free_symbols)[0]
+    return sp.Symbol(preferida, real=True)
 
 
 def validar_nodos(nodos: Sequence[sp.Expr]) -> list[sp.Expr]:
@@ -195,10 +242,15 @@ def validar_datos(nodos: Sequence[sp.Expr], valores: Sequence[sp.Expr]) -> None:
         )
 
 
-def evaluar_en(f: sp.Expr, punto: sp.Expr) -> sp.Expr:
+def evaluar_en(f: sp.Expr, punto: sp.Expr, var: sp.Symbol | None = None) -> sp.Expr:
     """Evalúa f en un punto de forma exacta; lanza ErrorEntrada si no está definida."""
+    if var is None:
+        var = obtener_variable(f)
     try:
-        valor = sp.simplify(f.subs(X, punto))
+        reemplazos = {s: punto for s in f.free_symbols if s.name == var.name}
+        if not reemplazos:
+            reemplazos = {var: punto}
+        valor = sp.simplify(f.subs(reemplazos))
     except Exception:
         valor = sp.nan
     if (
@@ -207,13 +259,13 @@ def evaluar_en(f: sp.Expr, punto: sp.Expr) -> sp.Expr:
         or valor.is_finite is False
         or valor.is_real is False
     ):
-        raise ErrorEntrada(f"La función f(x) = {f} no está definida (en los reales) en x = {punto}.")
+        raise ErrorEntrada(f"La función f({var.name}) = {f} no está definida (en los reales) en {var.name} = {punto}.")
     return valor
 
 
-def evaluar_funcion_en_nodos(f: sp.Expr, nodos: Sequence[sp.Expr]) -> list[sp.Expr]:
+def evaluar_funcion_en_nodos(f: sp.Expr, nodos: Sequence[sp.Expr], var: sp.Symbol | None = None) -> list[sp.Expr]:
     """Calcula f(x_k) para cada nodo."""
-    return [evaluar_en(f, xk) for xk in nodos]
+    return [evaluar_en(f, xk, var) for xk in nodos]
 
 
 def advertencias_nodos(nodos: Sequence[sp.Expr]) -> list[str]:

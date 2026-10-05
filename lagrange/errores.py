@@ -37,9 +37,9 @@ def a_float(v: sp.Expr) -> float:
     return float(sp.N(v, 30))
 
 
-def funcion_numerica(expr: sp.Expr) -> Callable:
-    """Versión numérica (numpy) de una expresión en x; acepta escalares o arreglos."""
-    fn = sp.lambdify(X, expr, modules="numpy")
+def funcion_numerica(expr: sp.Expr, var: sp.Symbol = X) -> Callable:
+    """Versión numérica (numpy) de una expresión en var; acepta escalares o arreglos."""
+    fn = sp.lambdify(var, expr, modules="numpy")
 
     def h(t):
         with np.errstate(all="ignore"):
@@ -51,7 +51,7 @@ def funcion_numerica(expr: sp.Expr) -> Callable:
     return h
 
 
-def raiz_exacta(expr: sp.Expr, r: float) -> sp.Expr:
+def raiz_exacta(expr: sp.Expr, r: float, var: sp.Symbol = X) -> sp.Expr:
     """Intenta reconocer una raíz racional exacta de ``expr`` cerca de ``r``.
 
     Solo se acepta si al sustituirla la expresión vale exactamente 0; en caso
@@ -59,7 +59,7 @@ def raiz_exacta(expr: sp.Expr, r: float) -> sp.Expr:
     """
     try:
         q = sp.nsimplify(r, rational=True, tolerance=1e-9)
-        if q.is_Rational and q.q <= 10**6 and sp.simplify(expr.subs(X, q)) == 0:
+        if q.is_Rational and q.q <= 10**6 and sp.simplify(expr.subs(var, q)) == 0:
             return q
     except Exception:
         pass
@@ -133,6 +133,7 @@ class CotaError:
     x_max_g: sp.Expr | None = None
     factor: sp.Expr | None = None       # M/(n+1)!
     cota_global: sp.Expr | None = None
+    var: sp.Symbol = X
 
 
 def intervalo_trabajo(nodos: Sequence[sp.Expr], puntos: Sequence[sp.Expr]) -> tuple[sp.Expr, sp.Expr, bool]:
@@ -151,35 +152,35 @@ def intervalo_trabajo(nodos: Sequence[sp.Expr], puntos: Sequence[sp.Expr]) -> tu
     return a, b, extrapolacion
 
 
-def polinomio_nodal(nodos: Sequence[sp.Expr]) -> sp.Expr:
+def polinomio_nodal(nodos: Sequence[sp.Expr], var: sp.Symbol = X) -> sp.Expr:
     """g(x) = Π_{i=0}^{n} (x − x_i), expandido (n+1 factores)."""
     g = sp.Integer(1)
     for xi in nodos:
-        g *= X - xi
+        g *= var - xi
     return sp.expand(g)
 
 
-def _tiene_raiz_en(arg: sp.Expr, a: sp.Expr, b: sp.Expr) -> bool:
+def _tiene_raiz_en(arg: sp.Expr, a: sp.Expr, b: sp.Expr, var: sp.Symbol = X) -> bool:
     try:
-        sol = sp.solveset(arg, X, sp.Interval(a, b))
+        sol = sp.solveset(arg, var, sp.Interval(a, b))
         return sol != sp.S.EmptySet
     except Exception:
         return True
 
 
-def _problema_continuidad(expr: sp.Expr, a: sp.Expr, b: sp.Expr, muestras: int) -> str | None:
+def _problema_continuidad(expr: sp.Expr, a: sp.Expr, b: sp.Expr, muestras: int, var: sp.Symbol = X) -> str | None:
     """Devuelve un mensaje si ``expr`` no es continua en [a, b]; None si lo es."""
     # Funciones con "picos" (abs, sign): no son derivables donde su argumento es 0.
     for atomo in expr.atoms(sp.Abs, sp.sign, sp.DiracDelta, sp.Heaviside):
-        if _tiene_raiz_en(atomo.args[0], a, b):
+        if _tiene_raiz_en(atomo.args[0], a, b, var):
             return f"contiene {atomo} cuyo argumento se anula en [a, b]"
     try:
-        dominio = continuous_domain(expr, X, sp.Interval(a, b))
+        dominio = continuous_domain(expr, var, sp.Interval(a, b))
         if not sp.Interval(a, b).is_subset(dominio):
             return f"no es continua en todo [a, b] (dominio de continuidad: {dominio})"
     except Exception:
         pass  # si SymPy no puede decidirlo, se usa el muestreo
-    muestra = funcion_numerica(_sin_deltas(expr))(np.linspace(a_float(a), a_float(b), muestras))
+    muestra = funcion_numerica(_sin_deltas(expr), var)(np.linspace(a_float(a), a_float(b), muestras))
     if not np.all(np.isfinite(muestra)):
         return "toma valores no finitos en el muestreo de [a, b]"
     return None
@@ -191,17 +192,17 @@ def _sin_deltas(expr: sp.Expr) -> sp.Expr:
 
 
 def _candidatos(
-    expr: sp.Expr, a: sp.Expr, b: sp.Expr, raices: list[ResultadoBiseccion], derivada_de_raices: sp.Expr
+    expr: sp.Expr, a: sp.Expr, b: sp.Expr, raices: list[ResultadoBiseccion], derivada_de_raices: sp.Expr, var: sp.Symbol = X
 ) -> list[Candidato]:
     """Evalúa ``expr`` en a, b y en las raíces (reconocidas exactas cuando es posible)."""
     lista: list[tuple[sp.Expr, str]] = [(a, "extremo a"), (b, "extremo b")]
     for r in raices:
-        xr = raiz_exacta(derivada_de_raices, r.raiz)
+        xr = raiz_exacta(derivada_de_raices, r.raiz, var)
         if a_float(a) < a_float(xr) < a_float(b):
             lista.append((xr, "raíz (bisección)"))
     candidatos = []
     for xc, origen in lista:
-        v = expr.subs(X, xc)
+        v = expr.subs(var, xc)
         v = v if v.is_Rational else sp.simplify(v)
         candidatos.append(Candidato(xc, v, sp.Abs(v), origen))
     return sorted(candidatos, key=lambda c: a_float(c.x))
@@ -215,12 +216,13 @@ def calcular_cota(
     max_iter: int = 100,
     muestras: int = 2000,
     subintervalos: int = 199,
+    var: sp.Symbol = X,
 ) -> CotaError:
     """Calcula M, max|g| y la cota global en [a, b] (nodos + puntos x*)."""
     nodos = list(nodos)
     n = len(nodos) - 1
     a, b, extrapolacion = intervalo_trabajo(nodos, puntos)
-    cota = CotaError(True, "", a, b, extrapolacion, n, orden=n + 1, factorial=math.factorial(n + 1))
+    cota = CotaError(True, "", a, b, extrapolacion, n, orden=n + 1, factorial=math.factorial(n + 1), var=var)
 
     if f is None:
         cota.aplicable = False
@@ -231,23 +233,23 @@ def calcular_cota(
         return cota
 
     # --- Continuidad de f y de f^(n+1) --------------------------------------
-    problema = _problema_continuidad(f, a, b, muestras)
+    problema = _problema_continuidad(f, a, b, muestras, var)
     if problema:
         cota.aplicable = False
-        cota.motivo = (f"f(x) = {f} {problema}. El teorema del error exige f continua con "
+        cota.motivo = (f"f({var}) = {f} {problema}. El teorema del error exige f continua con "
                        f"derivada de orden {n + 1} continua en [a, b]; la cota no aplica.")
         return cota
 
-    derivada = sp.simplify(sp.diff(f, X, n + 1))
-    problema = _problema_continuidad(derivada, a, b, muestras)
+    derivada = sp.simplify(sp.diff(f, var, n + 1))
+    problema = _problema_continuidad(derivada, a, b, muestras, var)
     if problema:
         cota.aplicable = False
         cota.derivada = derivada
-        cota.motivo = (f"f^({n + 1})(x) = {derivada} {problema}. El teorema del error exige "
+        cota.motivo = (f"f^({n + 1})({var}) = {derivada} {problema}. El teorema del error exige "
                        f"f^({n + 1}) continua en [a, b]; la cota no aplica.")
         return cota
     derivada = _sin_deltas(derivada)
-    siguiente = _sin_deltas(sp.simplify(sp.diff(derivada, X)))
+    siguiente = _sin_deltas(sp.simplify(sp.diff(derivada, var)))
     cota.derivada, cota.derivada_siguiente = derivada, siguiente
 
     # --- M = max |f^(n+1)| en [a, b] ----------------------------------------
@@ -255,25 +257,25 @@ def calcular_cota(
         cota.M, cota.x_M = sp.Integer(0), None
         cota.candidatos_M = [Candidato(a, sp.Integer(0), sp.Integer(0), "extremo a"),
                              Candidato(b, sp.Integer(0), sp.Integer(0), "extremo b")]
-        cota.nota_M = (f"f^({n + 1})(x) ≡ 0: f es un polinomio de grado ≤ {n}, "
+        cota.nota_M = (f"f^({n + 1})({var}) ≡ 0: f es un polinomio de grado ≤ {n}, "
                        "por lo que P_n reproduce f exactamente.")
     else:
         if siguiente == 0:
             raices_M: list[ResultadoBiseccion] = []
-            cota.nota_M = f"f^({n + 2})(x) ≡ 0: f^({n + 1}) es constante, basta con los extremos."
+            cota.nota_M = f"f^({n + 2})({var}) ≡ 0: f^({n + 1}) es constante, basta con los extremos."
         else:
-            raices_M = buscar_raices(funcion_numerica(siguiente), a_float(a), a_float(b),
+            raices_M = buscar_raices(funcion_numerica(siguiente, var), a_float(a), a_float(b),
                                      tol, max_iter, subintervalos)
         cota.biseccion_M = raices_M
-        cands = _candidatos(derivada, a, b, raices_M, siguiente)
+        cands = _candidatos(derivada, a, b, raices_M, siguiente, var)
         # Red de seguridad: muestreo denso de |f^(n+1)|.
         malla = np.linspace(a_float(a), a_float(b), muestras)
-        valores = np.abs(funcion_numerica(derivada)(malla))
+        valores = np.abs(funcion_numerica(derivada, var)(malla))
         k = int(np.argmax(valores))
         mejor = max(cands, key=lambda c: a_float(c.absoluto))
         if valores[k] > a_float(mejor.absoluto) * (1 + 1e-9) + 1e-15:
             xm = sp.Float(malla[k], 17)
-            vm = derivada.subs(X, xm)
+            vm = derivada.subs(var, xm)
             cands.append(Candidato(xm, vm, sp.Abs(vm), "muestreo denso"))
             cota.nota_M = (f"El muestreo con {muestras} puntos encontró un valor mayor que los "
                            "candidatos analíticos; se usa ese valor.")
@@ -282,12 +284,12 @@ def calcular_cota(
         cota.M, cota.x_M = mejor.absoluto, mejor.x
 
     # --- max |g| en [a, b] ---------------------------------------------------
-    g = polinomio_nodal(nodos)
-    dg = sp.expand(sp.diff(g, X))
+    g = polinomio_nodal(nodos, var)
+    dg = sp.expand(sp.diff(g, var))
     cota.g, cota.dg = g, dg
-    cota.biseccion_g = buscar_raices(funcion_numerica(dg), a_float(a), a_float(b),
+    cota.biseccion_g = buscar_raices(funcion_numerica(dg, var), a_float(a), a_float(b),
                                      tol, max_iter, subintervalos)
-    cota.candidatos_g = _candidatos(g, a, b, cota.biseccion_g, dg)
+    cota.candidatos_g = _candidatos(g, a, b, cota.biseccion_g, dg, var)
     mejor_g = max(cota.candidatos_g, key=lambda c: a_float(c.absoluto))
     cota.max_g, cota.x_max_g = mejor_g.absoluto, mejor_g.x
 

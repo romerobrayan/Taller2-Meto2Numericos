@@ -52,11 +52,12 @@ class ResultadoLagrange:
     polinomio: sp.Expr                  # P_n(x) expandido y simplificado
     suma_bases: sp.Expr                 # Σ L_{n,k}(x), debe ser 1
     verificaciones: list[Verificacion] = field(default_factory=list)
+    var: sp.Symbol = X
 
     @property
     def grado(self) -> int:
         """Grado real de P_n (puede ser menor que n si los datos lo permiten)."""
-        return int(sp.degree(self.polinomio, X)) if self.polinomio != 0 else 0
+        return int(sp.degree(self.polinomio, self.var)) if self.polinomio != 0 else 0
 
     @property
     def suma_bases_ok(self) -> bool:
@@ -74,8 +75,8 @@ def _simplificar(expr: sp.Expr) -> sp.Expr:
     return sp.nsimplify(expr) if expr.has(sp.Float) else sp.simplify(expr)
 
 
-def polinomio_base(nodos: Sequence[sp.Expr], k: int) -> PolinomioBase:
-    """Construye L_{n,k}(x) = Π_{i≠k} (x − x_i)/(x_k − x_i)."""
+def polinomio_base(nodos: Sequence[sp.Expr], k: int, var: sp.Symbol = X) -> PolinomioBase:
+    """Construye L_{n,k}(var) = Π_{i≠k} (var − x_i)/(x_k − x_i)."""
     xk = nodos[k]
     otros = [xi for i, xi in enumerate(nodos) if i != k]
     factores_den = [_simplificar(xk - xi) for xi in otros]
@@ -83,7 +84,7 @@ def polinomio_base(nodos: Sequence[sp.Expr], k: int) -> PolinomioBase:
     numerador = sp.Integer(1)
     denominador = sp.Integer(1)
     for xi, d in zip(otros, factores_den):
-        numerador *= X - xi
+        numerador *= var - xi
         denominador *= d
     denominador = _simplificar(denominador)
     numerador = sp.expand(numerador)
@@ -91,22 +92,24 @@ def polinomio_base(nodos: Sequence[sp.Expr], k: int) -> PolinomioBase:
     return PolinomioBase(k, xk, otros, factores_den, numerador, denominador, expandido)
 
 
-def construir_lagrange(nodos: Sequence[sp.Expr], valores: Sequence[sp.Expr]) -> ResultadoLagrange:
+def construir_lagrange(
+    nodos: Sequence[sp.Expr], valores: Sequence[sp.Expr], var: sp.Symbol = X
+) -> ResultadoLagrange:
     """Construye todos los L_{n,k}, el polinomio P_n y sus verificaciones."""
     nodos = validar_nodos(nodos)
     validar_datos(nodos, valores)
     valores = list(valores)
     n = len(nodos) - 1
 
-    bases = [polinomio_base(nodos, k) for k in range(n + 1)]
+    bases = [polinomio_base(nodos, k, var) for k in range(n + 1)]
     polinomio = sp.expand(sum((fk * b.expandido for fk, b in zip(valores, bases)), sp.Integer(0)))
-    if not all(c.is_Rational for c in sp.Poly(polinomio, X).all_coeffs()):
+    if not all(c.is_Rational for c in sp.Poly(polinomio, var).all_coeffs()):
         polinomio = sp.expand(sp.simplify(polinomio))
     suma_bases = sp.expand(sum((b.expandido for b in bases), sp.Integer(0)))
 
     verificaciones = []
     for k, (xk, fk) in enumerate(zip(nodos, valores)):
-        p_xk = _simplificar(polinomio.subs(X, xk))
+        p_xk = _simplificar(polinomio.subs(var, xk))
         ok = sp.simplify(p_xk - fk) == 0
         verificaciones.append(Verificacion(k, xk, p_xk, fk, bool(ok)))
 
@@ -118,9 +121,13 @@ def construir_lagrange(nodos: Sequence[sp.Expr], valores: Sequence[sp.Expr]) -> 
         polinomio=polinomio,
         suma_bases=sp.simplify(suma_bases),
         verificaciones=verificaciones,
+        var=var,
     )
 
 
-def evaluar_polinomio(polinomio: sp.Expr, punto: sp.Expr) -> sp.Expr:
+def evaluar_polinomio(polinomio: sp.Expr, punto: sp.Expr, var: sp.Symbol | None = None) -> sp.Expr:
     """Evalúa el polinomio expandido P_n en x* de forma exacta."""
-    return _simplificar(polinomio.subs(X, punto))
+    if var is None:
+        syms = list(polinomio.free_symbols)
+        var = syms[0] if syms else X
+    return _simplificar(polinomio.subs(var, punto))

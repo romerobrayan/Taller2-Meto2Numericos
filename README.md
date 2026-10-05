@@ -101,17 +101,27 @@ Para iniciar el menú en español:
 python main.py
 ```
 Opciones del menú principal:
-- `1`: Ingresar una función $f(x)$ y el arreglo de nodos.
-- `2`: Ingresar una tabla de datos $(x_k, y_k)$ sin función analítica.
-- `3`: Cambiar los puntos $x^*$ a evaluar.
+- `1`: Ingresar una función $f(x)$ o con variable personalizada ($f(t)$, $f(u)$, etc.) y los nodos (en una sola línea o punto por punto guiado).
+- `2`: Ingresar una tabla de datos $(x_k, y_k)$ o con variable personalizada sin función analítica (en arreglos o pares punto a punto).
+- `3`: Ingresar nueva(s) variable(s) o punto(s) a evaluar ($x^*$, $t^*$) para recalcular directamente sin reiniciar.
 - `4`: Mostrar el reporte paso a paso completo (secciones 1 a 9).
 - `5`: Mostrar únicamente el resumen final consolidado.
 - `6`: Generar y guardar la gráfica comparativa en PNG.
 - `7`: Exportar el reporte en formato Markdown.
 - `8`: Configurar precisión decimal, tolerancia y número de iteraciones de bisección.
 - `9`: Cargar automáticamente el ejemplo de clase (Test B: $f(x) = 1/x$, nodos $2, 2.75, 4$, $x^* = 3$).
-- `10`: Ver ayuda sobre sintaxis matemática admitida.
+- `10`: Ver ayuda sobre sintaxis matemática y formatos admitidos.
 - `0`: Salir.
+
+#### Modos de ingreso de valores
+El software ofrece dos modalidades de ingreso:
+1. **En una sola línea**: arreglos separados por comas o espacios (ej. `2, 2.75, 4` o `[2, 2.75, 4]`).
+2. **Punto por punto guiado**: el usuario indica la cantidad de puntos ($n+1$) y el programa solicita uno a uno los valores ($x_0, x_1, \dots$ o pares $x_k, y_k$).
+
+#### Variables independientes y evaluación
+- Se admite cualquier variable independiente (ej. `t` para tiempo, `u`, `x`, etc.).
+- Se detecta automáticamente desde expresiones como `f(t) = 1/t` o `exp(u)`.
+- Se pueden evaluar múltiples valores en un solo paso (ej. `2.5, 3, 3.5`) y cambiarlos en cualquier momento mediante la Opción 3.
 
 ### 4.2 Ejecución directa por CLI
 Para reproducir ejecuciones completas en una sola instrucción:
@@ -119,6 +129,9 @@ Para reproducir ejecuciones completas en una sola instrucción:
 ```bash
 # Modo función: Test B del texto guía
 python main.py --f "1/x" --nodos "2, 2.75, 4" --x 3
+
+# Función con variable personalizada (t) y prefijo f(t) = ...
+python main.py --f "f(t) = 1/t" --nodos "2, 2.75, 4" --x 3 --var t
 
 # Generando gráfica y exportando reporte a Markdown
 python main.py --f "1/x" --nodos "2, 2.75, 4" --x 3 --graficar --exportar

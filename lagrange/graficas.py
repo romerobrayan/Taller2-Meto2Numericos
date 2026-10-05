@@ -70,8 +70,9 @@ def graficar(
     a_plot = xmin - margen
     b_plot = xmax + margen
 
+    v_nom = analisis.var.name
     xs = np.linspace(a_plot, b_plot, puntos_malla)
-    fn_poly = funcion_numerica(analisis.lagrange.polinomio)
+    fn_poly = funcion_numerica(analisis.lagrange.polinomio, var=analisis.var)
     y_poly = fn_poly(xs)
 
     tiene_f = analisis.funcion is not None
@@ -87,14 +88,14 @@ def graficar(
 
     # Panel superior: f(x) y P_n(x)
     if tiene_f:
-        fn_f = funcion_numerica(analisis.funcion)
+        fn_f = funcion_numerica(analisis.funcion, var=analisis.var)
         y_f = fn_f(xs)
-        ax1.plot(xs, y_f, label=f"$f(x) = {sp.latex(analisis.funcion)}$", color="#1f77b4", lw=2)
+        ax1.plot(xs, y_f, label=f"$f({v_nom}) = {sp.latex(analisis.funcion)}$", color="#1f77b4", lw=2)
 
     ax1.plot(
         xs,
         y_poly,
-        label=f"$P_{{{analisis.lagrange.n}}}(x)$ (Lagrange)",
+        label=f"$P_{{{analisis.lagrange.n}}}({v_nom})$ (Lagrange)",
         color="#d62728",
         ls="--",
         lw=1.8,
@@ -113,7 +114,7 @@ def graficar(
     )
     for k, (xk, yk) in enumerate(zip(nodos_val, y_nodos)):
         ax1.annotate(
-            f"$(x_{k}, y_{k})$",
+            f"$({v_nom}_{{{k}}}, y_{{{k}}})$",
             (xk, yk),
             textcoords="offset points",
             xytext=(0, 9),
@@ -128,7 +129,7 @@ def graficar(
         yp_val = a_float(pt.valor_polinomio)
         ax1.scatter([xs_val], [yp_val], color="#9467bd", marker="^", s=90, zorder=6)
         ax1.axvline(xs_val, color="#9467bd", ls=":", alpha=0.6)
-        label_xs = f"$x^*={corto(pt.xstar, c)}$"
+        label_xs = f"${v_nom}^*={corto(pt.xstar, c)}$"
         ax1.annotate(
             f"$P_n({corto(pt.xstar, c)})\\approx {dec(pt.valor_polinomio, 4)}$",
             (xs_val, yp_val),
@@ -151,7 +152,7 @@ def graficar(
     # Panel inferior: Error y cota (solo si hay f(x))
     if ax2 is not None and tiene_f:
         err_abs = np.abs(y_f - y_poly)
-        ax2.plot(xs, err_abs, label="$|f(x) - P_n(x)|$ (Error real)", color="#e377c2", lw=1.8)
+        ax2.plot(xs, err_abs, label=f"$|f({v_nom}) - P_n({v_nom})|$ (Error real)", color="#e377c2", lw=1.8)
 
         # Cota global
         cota_glob = None
@@ -181,7 +182,7 @@ def graficar(
                     zorder=5,
                 )
                 ax2.annotate(
-                    f"Error en $x^*$: {err_val:.4g}",
+                    f"Error en ${v_nom}^*$: {err_val:.4g}",
                     (a_float(pt.xstar), err_val),
                     textcoords="offset points",
                     xytext=(10, 8),
@@ -190,12 +191,12 @@ def graficar(
                 )
 
         ax2.set_title("Comportamiento del error y cota teórica", fontsize=11, pad=6)
-        ax2.set_xlabel("$x$", fontsize=11)
+        ax2.set_xlabel(f"${v_nom}$", fontsize=11)
         ax2.set_ylabel("Error absoluto", fontsize=11)
         ax2.grid(True, ls=":", alpha=0.7)
         ax2.legend(loc="best", framealpha=0.9)
     else:
-        ax1.set_xlabel("$x$", fontsize=11)
+        ax1.set_xlabel(f"${v_nom}$", fontsize=11)
 
     plt.tight_layout()
     fig.savefig(str(ruta), dpi=150)
