@@ -21,6 +21,7 @@ from .entrada import (
     validar_datos,
     validar_nodos,
 )
+from .graficas import exportar_reporte, graficar
 from .reporte import corto, expr, reporte_texto
 
 try:  # rich es opcional: solo se usa para resaltar títulos y mensajes
@@ -223,6 +224,34 @@ class Interfaz:
         if self.recalcular():
             self.mostrar_reporte()
 
+    def opcion_graficar(self) -> None:
+        if self.nodos is None:
+            self.escribir("Primero ingrese los datos (opción 1, 2 o 9).", "yellow")
+            return
+        if self.analisis is None and not self.recalcular():
+            return
+        ruta = self.pedir("Ruta de salida (Enter para salidas/grafica_<fecha>.png): ", str, opcional=True)
+        ruta_salida = None if (ruta is None or not ruta.strip()) else ruta.strip()
+        try:
+            archivo = graficar(self.analisis, ruta=ruta_salida)
+            self.escribir(f"Gráfica guardada exitosamente en: {archivo}", "green")
+        except Exception as exc:
+            self.escribir(f"No se pudo generar la gráfica: {exc}", "red")
+
+    def opcion_exportar(self) -> None:
+        if self.nodos is None:
+            self.escribir("Primero ingrese los datos (opción 1, 2 o 9).", "yellow")
+            return
+        if self.analisis is None and not self.recalcular():
+            return
+        ruta = self.pedir("Ruta de salida (Enter para salidas/reporte_<fecha>.md): ", str, opcional=True)
+        ruta_salida = None if (ruta is None or not ruta.strip()) else ruta.strip()
+        try:
+            archivo = exportar_reporte(self.analisis, ruta=ruta_salida)
+            self.escribir(f"Reporte exportado exitosamente en: {archivo}", "green")
+        except Exception as exc:
+            self.escribir(f"No se pudo exportar el reporte: {exc}", "red")
+
     # ------------------------------------------------------------------ menú
     def _estado(self) -> str:
         if self.nodos is None:
@@ -259,6 +288,8 @@ class Interfaz:
             "3": self.opcion_puntos,
             "4": lambda: self.mostrar_reporte(False),
             "5": lambda: self.mostrar_reporte(True),
+            "6": self.opcion_graficar,
+            "7": self.opcion_exportar,
             "8": self.opcion_configuracion,
             "9": self.opcion_ejemplo,
             "10": lambda: self.escribir(AYUDA),
